@@ -12,6 +12,9 @@ const App = () => {
   const [userData, setUserData] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
+  // 관리자 권한을 가졌을 때의 화면 모드 토글 상태 (기본값: true = 관리자 모드)
+  const [isAdminMode, setIsAdminMode] = useState(true);
+
   // 로그인 입력 폼 상태
   const [authEmail, setAuthEmail] = useState('');
   const [authPw, setAuthPw] = useState('');
@@ -78,6 +81,7 @@ const App = () => {
       } else {
         setUser(null);
         setUserData(null);
+        setIsAdminMode(true); // 로그아웃 시 관리자 모드 복원
         if (unsubSnapshot) {
           unsubSnapshot();
           unsubSnapshot = null;
@@ -279,11 +283,23 @@ const App = () => {
     );
   }
 
-  // --- 6. 로그인 상태: 권한에 따른 라우팅 렌더링 ---
-  return isAdmin() ? (
-    <AdminDashboard userData={userData} handleLogout={handleLogout} />
+  // --- 6. 로그인 상태: 권한에 따른 라우팅 및 화면 모드 전환 적용 ---
+  const showAdminView = isAdmin() && isAdminMode;
+
+  return showAdminView ? (
+    <AdminDashboard 
+      userData={userData} 
+      handleLogout={handleLogout} 
+      toggleMode={() => setIsAdminMode(false)} 
+    />
   ) : (
-    <UserDashboard user={user} userData={userData} handleLogout={handleLogout} />
+    <UserDashboard 
+      user={user} 
+      userData={userData} 
+      handleLogout={handleLogout} 
+      showAdminToggle={isAdmin()} 
+      toggleMode={() => setIsAdminMode(true)} 
+    />
   );
 };
 

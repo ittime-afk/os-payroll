@@ -8,7 +8,7 @@ import { db } from '../firebase';
 import { parsePayrollExcel, downloadPayrollTemplate, getExcelSheetNames } from '../utils/excelUtils';
 import { generatePayrollEmailHtml } from '../utils/emailTemplate';
 
-const AdminDashboard = ({ userData, handleLogout }) => {
+const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
   const [yearMonth, setYearMonth] = useState(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -517,7 +517,13 @@ const AdminDashboard = ({ userData, handleLogout }) => {
           </div>
           <div>
             <span className="font-black text-xl tracking-tight text-slate-800">오성 급여관리 시스템</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 font-bold ml-2 hidden sm:inline-block">관리자 모드</span>
+            <span 
+              onClick={toggleMode}
+              title="클릭 시 일반 사원 모드로 전환하여 내 급여명세서를 확인합니다."
+              className="cursor-pointer text-[10px] px-2 py-0.5 rounded-full border border-indigo-200 text-indigo-750 bg-indigo-50 hover:bg-indigo-100 transition-all font-bold ml-2 hidden sm:inline-block select-none"
+            >
+              관리자 모드 🔄
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-4">

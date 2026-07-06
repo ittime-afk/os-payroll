@@ -3,7 +3,7 @@ import { FileSpreadsheet, Eye, Printer, Loader2, Award, Shield, Sparkles, X } fr
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const UserDashboard = ({ user, userData, handleLogout }) => {
+const UserDashboard = ({ user, userData, handleLogout, showAdminToggle, toggleMode }) => {
   const [salaries, setSalaries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewingSalary, setViewingSalary] = useState(null);
@@ -56,6 +56,14 @@ const UserDashboard = ({ user, userData, handleLogout }) => {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {showAdminToggle && (
+            <button 
+              onClick={toggleMode} 
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 shrink-0"
+            >
+              관리자 모드로 전환 ⚙️
+            </button>
+          )}
           <div className="flex flex-col items-end">
             <span className="text-[10px] font-black text-slate-400 tracking-widest">Signed In As</span>
             <span className="text-sm font-black text-slate-800 flex items-center gap-1.5">
