@@ -24,9 +24,24 @@ const App = () => {
   const [resetMessage, setResetMessage] = useState('');
   const [isResetLoading, setIsResetLoading] = useState(false);
 
-  // --- 1. 로그인 상태 모니터링 ---
+  // --- 1. 로그인 상태 모니터링 및 급여 관리자 권한 조회 ---
   useEffect(() => {
     let unsubSnapshot = null;
+
+    // 직원코드를 기반으로 payroll_admins 컬렉션에 관리자로 등록되어 있는지 확인하는 함수
+    const checkAdminStatus = async (userFields) => {
+      if (!userFields || !userFields.employeeCode) return false;
+      const codeClean = String(userFields.employeeCode).trim();
+      if (!codeClean) return false;
+
+      try {
+        const adminSnap = await getDoc(doc(db, 'payroll_admins', codeClean));
+        return adminSnap.exists();
+      } catch (err) {
+        console.error('payroll_admins 조회 오류:', err);
+        return false;
+      }
+    };
 
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setIsLoadingUser(true);
@@ -37,24 +52,28 @@ const App = () => {
           
           if (docSnap.exists()) {
             const data = docSnap.data();
+            const isPayAdmin = await checkAdminStatus(data);
+            
             setUser(u);
-            setUserData(data);
+            setUserData({ ...data, isPayrollAdmin: isPayAdmin });
 
             // 데이터 실시간 업데이트 반영
-            unsubSnapshot = onSnapshot(doc(db, 'users', u.uid), (snap) => {
+            unsubSnapshot = onSnapshot(doc(db, 'users', u.uid), async (snap) => {
               if (snap.exists()) {
-                setUserData(snap.data());
+                const updatedData = snap.data();
+                const updatedIsPayAdmin = await checkAdminStatus(updatedData);
+                setUserData({ ...updatedData, isPayrollAdmin: updatedIsPayAdmin });
               }
             });
           } else {
             // Firestore에 사용자 정보가 없는 임시 비가입 상태 대응
             setUser(u);
-            setUserData({ name: u.email.split('@')[0], role: 'production', role2: 'STAFF' });
+            setUserData({ name: u.email.split('@')[0], role: 'production', role2: 'STAFF', isPayrollAdmin: false });
           }
         } catch (e) {
           console.error('사용자 데이터 조회 에러: ', e);
           setUser(u);
-          setUserData({ name: u.email.split('@')[0], role: 'production', role2: 'STAFF' });
+          setUserData({ name: u.email.split('@')[0], role: 'production', role2: 'STAFF', isPayrollAdmin: false });
         }
       } else {
         setUser(null);
@@ -124,12 +143,10 @@ const App = () => {
   };
 
   // 관리자 권한 판별
-  // role이 admin 또는 office이거나, role2가 CEO인 경우 관리자로 간주
+  // users의 사번(employeeCode)이 payroll_admins 컬렉션에 등록된 경우만 관리자로 간주
   const isAdmin = () => {
     if (!userData) return false;
-    const role = (userData.role || '').toLowerCase();
-    const role2 = (userData.role2 || '').toUpperCase();
-    return role === 'admin' || role === 'office' || role2 === 'CEO';
+    return userData.isPayrollAdmin === true;
   };
 
   // --- 4. 로딩 화면 렌더링 ---
