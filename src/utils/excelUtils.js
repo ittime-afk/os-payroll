@@ -1,5 +1,4 @@
 import * as XLSX from 'xlsx';
-import XLSXStyle from 'xlsx-js-style';
 
 // 37개 칼럼 원래 필드 리스트 및 초깃값
 const DEFAULT_PAYROLL_DATA = {
@@ -350,24 +349,27 @@ export const downloadPayrollTemplate = () => {
   XLSX.writeFile(workbook, '급여업로드_공식양식.xlsx');
 };
 
+/**
+ * 세무서 제출용 급여대장 엑셀 내보내기 (이메일, 예금주, 계좌 정보 제외 및 식대보조 비과세 한도 적용)
+ */
 export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
   const headers = [
     '직원코드', '성명', '보통기본급', '근속기본급', '주휴수당',
-    '식대보조(비과세)', '식대보조(과세)', '만근수당', '연장수당', '연차수당',
-    '비정기인센티브', '상여', '기타책임수당', '자가운전보조', '육아수당', '기타금품', 
+    '식대보조\n(비과세)', '식대보조\n(과세)', '만근수당', '연장수당', '연차수당',
+    '비정기\n인센티브', '상여', '기타\n책임수당', '자가운전\n보조', '육아수당', '기타\n금품', 
     '소득총액', '과세합계', 
     '국민연금', '건강보험', '장기요양', '고용보험', 
     '소득세', '주민세', 
-    '연말정산소득세', '연말정산주민세', 
+    '연말정산\n소득세', '연말정산\n주민세', 
     '가불', 
-    '공제총액(가불포함)', '실제지급(가불미포)', '공제액(가불제외)', '실제지급(가불포함)'
+    '공제총액\n(가불포함)', '공제액\n(가불제외)', '실제지급\n(가불포함)'
   ];
 
   // 구분선 테두리(오른쪽 테두리)가 들어갈 열 인덱스
   // 15: 기타금품, 17: 과세합계, 21: 고용보험, 23: 주민세, 26: 가불
   const borderRightIndices = [15, 17, 21, 23, 26];
 
-  const buildCell = (val, isNumber, hasRightBorder, isHeader = false) => {
+  const buildCell = (val, isNumber, hasRightBorder, isHeader = false, isTotal = false, idx = -1) => {
     const cell = {};
     if (isNumber) {
       cell.v = Number(val || 0);
@@ -378,27 +380,65 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
       cell.t = 's';
     }
 
-    const style = {};
+    const style = {
+      font: { sz: 10 },
+      border: {
+        top: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        right: { style: 'thin', color: { rgb: 'D9D9D9' } }
+      },
+      alignment: {
+        horizontal: isNumber ? 'right' : 'center',
+        vertical: 'center'
+      }
+    };
+
     if (isHeader) {
       style.font = { bold: true, sz: 10 };
-      style.fill = { fgColor: { rgb: 'F1F5F9' } };
-      style.alignment = { horizontal: 'center', vertical: 'center' };
+      style.alignment = { horizontal: 'center', vertical: 'center', wrapText: true };
+      style.border = {
+        top: { style: 'thin', color: { rgb: '999999' } },
+        bottom: { style: 'medium', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        right: { style: 'thin', color: { rgb: 'D9D9D9' } }
+      };
+      
+      // 이미지와 일치하는 헤더 배경색 지정
+      if ([10, 11, 12].includes(idx)) {
+        style.fill = { fgColor: { rgb: 'E2EFDA' } }; // Light Green
+      } else if ([13, 14, 15].includes(idx)) {
+        style.fill = { fgColor: { rgb: 'DDEBF7' } }; // Light Blue
+      } else if ([16, 17].includes(idx)) {
+        style.fill = { fgColor: { rgb: 'FFF2CC' } }; // Light Yellow
+      } else if ([18, 19, 20, 21].includes(idx)) {
+        style.fill = { fgColor: { rgb: 'FCE4D6' } }; // Light Peach
+      } else {
+        style.fill = { fgColor: { rgb: 'F2F2F2' } }; // Default Light Gray
+      }
     }
     
-    if (hasRightBorder) {
+    if (isTotal) {
+      style.font = { bold: true, sz: 10 };
+      style.fill = { fgColor: { rgb: 'FAFAFA' } }; // 합계 행은 살짝 회색조로 차별화
       style.border = {
-        right: { style: 'thin', color: { rgb: '000000' } }
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'double', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        right: { style: 'thin', color: { rgb: 'D9D9D9' } }
       };
     }
 
-    if (Object.keys(style).length > 0) {
-      cell.s = style;
+    if (hasRightBorder) {
+      style.border.right = { style: 'thin', color: { rgb: '000000' } };
     }
+
+    cell.s = style;
     return cell;
   };
 
   const headerCells = headers.map((h, idx) => 
-    buildCell(h, false, borderRightIndices.includes(idx), true)
+    buildCell(h, false, borderRightIndices.includes(idx), true, false, idx)
   );
 
   const rows = salaries.map(sal => {
@@ -435,14 +475,69 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
       [sal.yearEndLocalIncomeTax, true],
       [sal.advancePayment, true],
       [sal.totalDeduction, true],
-      [sal.netPay, true],
       [sal.deductibleTax, true],
       [sal.totalAfterTax, true]
     ];
 
     return rawRow.map(([val, isNumber], idx) => 
-      buildCell(val, isNumber, borderRightIndices.includes(idx))
+      buildCell(val, isNumber, borderRightIndices.includes(idx), false, false, idx)
     );
+  });
+
+  // 합계 행 계산 및 추가
+  const totalRow = [];
+  totalRow.push(buildCell('', false, false, false, true, 0)); // 직원코드 (빈칸)
+  totalRow.push(buildCell('합계', false, false, false, true, 1)); // 성명 '합계'
+
+  const sumVal = (keyFn) => {
+    return salaries.reduce((sum, sal) => sum + Number(keyFn(sal) || 0), 0);
+  };
+
+  const getMealAllowance = (sal) => Number(sal.mealAllowance || 0);
+  const getMealNonTaxable = (sal) => {
+    const meal = getMealAllowance(sal);
+    return meal > 200000 ? 200000 : meal;
+  };
+  const getMealTaxable = (sal) => {
+    const meal = getMealAllowance(sal);
+    return meal > 200000 ? meal - 200000 : 0;
+  };
+
+  const colSumFunctions = [
+    (sal) => sal.baseSalaryNormal,
+    (sal) => sal.baseSalaryService,
+    (sal) => sal.weeklyHolidayAllowance,
+    getMealNonTaxable,
+    getMealTaxable,
+    (sal) => sal.fullAttendanceAllowance,
+    (sal) => sal.responsibilityAllowance1,
+    (sal) => sal.responsibilityAllowance2,
+    (sal) => sal.irregularIncentive,
+    (sal) => sal.bonus,
+    (sal) => sal.otherAllowance1,
+    (sal) => sal.drivingAllowance,
+    (sal) => sal.childcareAllowance,
+    (sal) => sal.otherAllowance2,
+    (sal) => sal.totalAllowance,
+    (sal) => sal.taxableTotal || sal.totalAllowance,
+    (sal) => sal.nationalPension,
+    (sal) => sal.healthInsurance,
+    (sal) => sal.longTermCare,
+    (sal) => sal.employmentInsurance,
+    (sal) => sal.incomeTax,
+    (sal) => sal.localIncomeTax,
+    (sal) => sal.yearEndIncomeTax,
+    (sal) => sal.yearEndLocalIncomeTax,
+    (sal) => sal.advancePayment,
+    (sal) => sal.totalDeduction,
+    (sal) => sal.deductibleTax,
+    (sal) => sal.totalAfterTax
+  ];
+
+  colSumFunctions.forEach((sumFn, colIdx) => {
+    const sum = sumVal(sumFn);
+    const overallIdx = colIdx + 2;
+    totalRow.push(buildCell(sum, true, borderRightIndices.includes(overallIdx), false, true, overallIdx));
   });
 
   const yyyyMM = yearMonthStr || new Date().toISOString().substring(0, 7);
@@ -458,12 +553,12 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
     }
   };
 
-  // aoaData: 1열 제목, 2열 공백, 3열 헤더, 4열+ 데이터
   const wsData = [
     [titleCell],
     [],
     headerCells,
-    ...rows
+    ...rows,
+    totalRow
   ];
 
   const worksheet = XLSXStyle.utils.aoa_to_sheet(wsData);
@@ -503,17 +598,22 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
     { wch: 14 }, // 연말정산주민세
     { wch: 12 }, // 가불
     { wch: 16 }, // 공제총액(가불포함)
-    { wch: 16 }, // 실제지급(가불미포)
     { wch: 16 }, // 공제액(가불제외)
     { wch: 16 }  // 실제지급(가불포함)
   ];
 
-  // 1행 높이를 제목에 맞춰 크게 설정 (제목 40pt, 마진 15pt, 헤더 25pt)
-  worksheet['!rows'] = [
-    { hpt: 40 }, // Row 1: Title
+  // 행 높이 지정
+  const rowsHeight = [
+    { hpt: 40 }, // Row 1: Title (height 40pt)
     { hpt: 15 }, // Row 2: Spacer
-    { hpt: 25 }  // Row 3: Header
+    { hpt: 30 }  // Row 3: Header
   ];
+  rows.forEach(() => {
+    rowsHeight.push({ hpt: 20 }); // 데이터 행
+  });
+  rowsHeight.push({ hpt: 22 }); // 합계 행
+
+  worksheet['!rows'] = rowsHeight;
 
   const workbook = XLSXStyle.utils.book_new();
   XLSXStyle.utils.book_append_sheet(workbook, worksheet, '급여대장');
