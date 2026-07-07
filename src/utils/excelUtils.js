@@ -348,3 +348,70 @@ export const downloadPayrollTemplate = () => {
   XLSX.utils.book_append_sheet(workbook, worksheet, '급여입력');
   XLSX.writeFile(workbook, '급여업로드_공식양식.xlsx');
 };
+
+/**
+ * 세무서 제출용 급여대장 엑셀 내보내기 (이메일, 예금주, 계좌 정보 제외 및 식대보조 비과세 한도 적용)
+ */
+export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
+  const headers = [
+    '직원코드', '성명', '보통기본급', '근속기본급', '주휴수당',
+    '식대보조(비과세)', '식대보조(과세)', '만근수당', '연장수당', '연차수당',
+    '비정기인센티브', '상여', '기타책임수당', '자가운전보조', '육아수당',
+    '기타금품', '소득총액', '과세합계', '국민연금', '건강보험',
+    '장기요양', '고용보험', '소득세', '주민세', '연말정산소득세',
+    '연말정산주민세', '가불', '공제총액(가불포함)', '실제지급(가불미포)',
+    '공제액(가불제외)', '실제지급(가불포함)', '연장근로시간', '연차사용일수', '개별메모'
+  ];
+
+  const rows = salaries.map(sal => {
+    const mealAllowance = Number(sal.mealAllowance || 0);
+    const mealNonTaxable = mealAllowance > 200000 ? 200000 : mealAllowance;
+    const mealTaxable = mealAllowance > 200000 ? mealAllowance - 200000 : 0;
+
+    return [
+      sal.employeeCode || '',
+      sal.name || '',
+      Number(sal.baseSalaryNormal || 0),
+      Number(sal.baseSalaryService || 0),
+      Number(sal.weeklyHolidayAllowance || 0),
+      mealNonTaxable,
+      mealTaxable,
+      Number(sal.fullAttendanceAllowance || 0),
+      Number(sal.responsibilityAllowance1 || 0),
+      Number(sal.responsibilityAllowance2 || 0),
+      Number(sal.irregularIncentive || 0),
+      Number(sal.bonus || 0),
+      Number(sal.otherAllowance1 || 0),
+      Number(sal.drivingAllowance || 0),
+      Number(sal.childcareAllowance || 0),
+      Number(sal.otherAllowance2 || 0),
+      Number(sal.totalAllowance || 0),
+      Number(sal.taxableTotal || sal.totalAllowance || 0),
+      Number(sal.nationalPension || 0),
+      Number(sal.healthInsurance || 0),
+      Number(sal.longTermCare || 0),
+      Number(sal.employmentInsurance || 0),
+      Number(sal.incomeTax || 0),
+      Number(sal.localIncomeTax || 0),
+      Number(sal.yearEndIncomeTax || 0),
+      Number(sal.yearEndLocalIncomeTax || 0),
+      Number(sal.advancePayment || 0),
+      Number(sal.totalDeduction || 0),
+      Number(sal.netPay || 0),
+      Number(sal.deductibleTax || 0),
+      Number(sal.totalAfterTax || 0),
+      Number(sal.overtimeHours || 0),
+      Number(sal.leaveDaysUsed || 0),
+      sal.individualMemo || ''
+    ];
+  });
+
+  const wsData = [headers, ...rows];
+  const worksheet = XLSX.utils.aoa_to_sheet(wsData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '급여대장');
+  
+  const yyyyMM = yearMonthStr || new Date().toISOString().substring(0, 7);
+  XLSX.writeFile(workbook, `급여대장_세무서제출용_${yyyyMM}.xlsx`);
+};
+

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { parsePayrollExcel, downloadPayrollTemplate, getExcelSheetNames } from '../utils/excelUtils';
+import { parsePayrollExcel, downloadPayrollTemplate, getExcelSheetNames, exportPayrollToExcel } from '../utils/excelUtils';
 import { generatePayrollEmailHtml } from '../utils/emailTemplate';
 
 const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
@@ -292,6 +292,14 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
     } catch (e) {
       alert('오류가 발생했습니다: ' + e.message);
     }
+  };
+
+  const handleExportExcel = () => {
+    if (filteredSavedSalaries.length === 0) {
+      alert('다운로드할 급여 데이터가 없습니다.');
+      return;
+    }
+    exportPayrollToExcel(filteredSavedSalaries, yearMonth);
   };
 
   const handleToggleStatus = async (sal) => {
@@ -945,6 +953,12 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 transition-all"
               >
                 <Lock size={12} /> 전체비공개
+              </button>
+              <button 
+                onClick={handleExportExcel}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-750 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-all shadow-sm active:scale-95"
+              >
+                <Download size={12} /> 세무서 제출용 엑셀 다운로드
               </button>
             </div>
           </div>
