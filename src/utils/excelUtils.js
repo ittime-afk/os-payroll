@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import XLSXStyle from 'xlsx-js-style';
 
 // 37개 칼럼 원래 필드 리스트 및 초깃값
 const DEFAULT_PAYROLL_DATA = {
@@ -349,94 +350,132 @@ export const downloadPayrollTemplate = () => {
   XLSX.writeFile(workbook, '급여업로드_공식양식.xlsx');
 };
 
-/**
- * 세무서 제출용 급여대장 엑셀 내보내기 (이메일, 예금주, 계좌 정보 제외 및 식대보조 비과세 한도 적용)
- */
 export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
   const headers = [
     '직원코드', '성명', '보통기본급', '근속기본급', '주휴수당',
     '식대보조(비과세)', '식대보조(과세)', '만근수당', '연장수당', '연차수당',
     '비정기인센티브', '상여', '기타책임수당', '자가운전보조', '육아수당', '기타금품', 
-    '', // Divider 1 (기타금품, 소득총액 사이)
     '소득총액', '과세합계', 
-    '', // Divider 2 (과세합계, 국민연금 사이)
     '국민연금', '건강보험', '장기요양', '고용보험', 
-    '', // Divider 3 (고용보험, 소득세 사이)
     '소득세', '주민세', 
-    '', // Divider 4 (주민세, 연말정산소득세 사이)
     '연말정산소득세', '연말정산주민세', 
     '가불', 
-    '', // Divider 5 (공제총액 가불 사이)
     '공제총액(가불포함)', '실제지급(가불미포)', '공제액(가불제외)', '실제지급(가불포함)'
   ];
+
+  // 구분선 테두리(오른쪽 테두리)가 들어갈 열 인덱스
+  // 15: 기타금품, 17: 과세합계, 21: 고용보험, 23: 주민세, 26: 가불
+  const borderRightIndices = [15, 17, 21, 23, 26];
+
+  const buildCell = (val, isNumber, hasRightBorder, isHeader = false) => {
+    const cell = {};
+    if (isNumber) {
+      cell.v = Number(val || 0);
+      cell.t = 'n';
+      cell.z = '#,##0';
+    } else {
+      cell.v = String(val || '');
+      cell.t = 's';
+    }
+
+    const style = {};
+    if (isHeader) {
+      style.font = { bold: true, sz: 10 };
+      style.fill = { fgColor: { rgb: 'F1F5F9' } };
+      style.alignment = { horizontal: 'center', vertical: 'center' };
+    }
+    
+    if (hasRightBorder) {
+      style.border = {
+        right: { style: 'thin', color: { rgb: '000000' } }
+      };
+    }
+
+    if (Object.keys(style).length > 0) {
+      cell.s = style;
+    }
+    return cell;
+  };
+
+  const headerCells = headers.map((h, idx) => 
+    buildCell(h, false, borderRightIndices.includes(idx), true)
+  );
 
   const rows = salaries.map(sal => {
     const mealAllowance = Number(sal.mealAllowance || 0);
     const mealNonTaxable = mealAllowance > 200000 ? 200000 : mealAllowance;
     const mealTaxable = mealAllowance > 200000 ? mealAllowance - 200000 : 0;
 
-    return [
-      sal.employeeCode || '',
-      sal.name || '',
-      Number(sal.baseSalaryNormal || 0),
-      Number(sal.baseSalaryService || 0),
-      Number(sal.weeklyHolidayAllowance || 0),
-      mealNonTaxable,
-      mealTaxable,
-      Number(sal.fullAttendanceAllowance || 0),
-      Number(sal.responsibilityAllowance1 || 0),
-      Number(sal.responsibilityAllowance2 || 0),
-      Number(sal.irregularIncentive || 0),
-      Number(sal.bonus || 0),
-      Number(sal.otherAllowance1 || 0),
-      Number(sal.drivingAllowance || 0),
-      Number(sal.childcareAllowance || 0),
-      Number(sal.otherAllowance2 || 0),
-      '', // Divider 1
-      Number(sal.totalAllowance || 0),
-      Number(sal.taxableTotal || sal.totalAllowance || 0),
-      '', // Divider 2
-      Number(sal.nationalPension || 0),
-      Number(sal.healthInsurance || 0),
-      Number(sal.longTermCare || 0),
-      Number(sal.employmentInsurance || 0),
-      '', // Divider 3
-      Number(sal.incomeTax || 0),
-      Number(sal.localIncomeTax || 0),
-      '', // Divider 4
-      Number(sal.yearEndIncomeTax || 0),
-      Number(sal.yearEndLocalIncomeTax || 0),
-      Number(sal.advancePayment || 0),
-      '', // Divider 5
-      Number(sal.totalDeduction || 0),
-      Number(sal.netPay || 0),
-      Number(sal.deductibleTax || 0),
-      Number(sal.totalAfterTax || 0)
+    const rawRow = [
+      [sal.employeeCode || '', false],
+      [sal.name || '', false],
+      [sal.baseSalaryNormal, true],
+      [sal.baseSalaryService, true],
+      [sal.weeklyHolidayAllowance, true],
+      [mealNonTaxable, true],
+      [mealTaxable, true],
+      [sal.fullAttendanceAllowance, true],
+      [sal.responsibilityAllowance1, true],
+      [sal.responsibilityAllowance2, true],
+      [sal.irregularIncentive, true],
+      [sal.bonus, true],
+      [sal.otherAllowance1, true],
+      [sal.drivingAllowance, true],
+      [sal.childcareAllowance, true],
+      [sal.otherAllowance2, true],
+      [sal.totalAllowance, true],
+      [sal.taxableTotal || sal.totalAllowance, true],
+      [sal.nationalPension, true],
+      [sal.healthInsurance, true],
+      [sal.longTermCare, true],
+      [sal.employmentInsurance, true],
+      [sal.incomeTax, true],
+      [sal.localIncomeTax, true],
+      [sal.yearEndIncomeTax, true],
+      [sal.yearEndLocalIncomeTax, true],
+      [sal.advancePayment, true],
+      [sal.totalDeduction, true],
+      [sal.netPay, true],
+      [sal.deductibleTax, true],
+      [sal.totalAfterTax, true]
     ];
+
+    return rawRow.map(([val, isNumber], idx) => 
+      buildCell(val, isNumber, borderRightIndices.includes(idx))
+    );
   });
 
   const yyyyMM = yearMonthStr || new Date().toISOString().substring(0, 7);
   const [yyyy, mm] = yyyyMM.split('-');
   const title = `${yyyy}년 ${mm}월 급여대장`;
 
+  const titleCell = {
+    v: title,
+    t: 's',
+    s: {
+      font: { sz: 22, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    }
+  };
+
   // aoaData: 1열 제목, 2열 공백, 3열 헤더, 4열+ 데이터
   const wsData = [
-    [title],
+    [titleCell],
     [],
-    headers,
+    headerCells,
     ...rows
   ];
 
-  const worksheet = XLSX.utils.aoa_to_sheet(wsData);
+  const worksheet = XLSXStyle.utils.aoa_to_sheet(wsData);
 
   // 셀 병합 (제목 A1을 전체 열 너비로 병합)
   worksheet['!merges'] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }
   ];
 
-  // 열 너비 설정 (구분선 Divider 열은 2로 좁게 설정)
+  // 열 너비 설정
   worksheet['!cols'] = [
-    { wch: 10 }, // 직원코드
+    { wch: 12 }, // 직원코드
     { wch: 10 }, // 성명
     { wch: 12 }, // 보통기본급
     { wch: 12 }, // 근속기본급
@@ -452,30 +491,32 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
     { wch: 12 }, // 자가운전보조
     { wch: 12 }, // 육아수당
     { wch: 12 }, // 기타금품
-    { wch: 2 },  // Divider 1
     { wch: 14 }, // 소득총액
     { wch: 14 }, // 과세합계
-    { wch: 2 },  // Divider 2
     { wch: 12 }, // 국민연금
     { wch: 12 }, // 건강보험
     { wch: 12 }, // 장기요양
     { wch: 12 }, // 고용보험
-    { wch: 2 },  // Divider 3
     { wch: 12 }, // 소득세
     { wch: 12 }, // 주민세
-    { wch: 2 },  // Divider 4
     { wch: 14 }, // 연말정산소득세
     { wch: 14 }, // 연말정산주민세
     { wch: 12 }, // 가불
-    { wch: 2 },  // Divider 5
     { wch: 16 }, // 공제총액(가불포함)
     { wch: 16 }, // 실제지급(가불미포)
     { wch: 16 }, // 공제액(가불제외)
     { wch: 16 }  // 실제지급(가불포함)
   ];
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, '급여대장');
-  XLSX.writeFile(workbook, `급여대장_세무서제출용_${yyyyMM}.xlsx`);
+  // 1행 높이를 제목에 맞춰 크게 설정 (제목 40pt, 마진 15pt, 헤더 25pt)
+  worksheet['!rows'] = [
+    { hpt: 40 }, // Row 1: Title
+    { hpt: 15 }, // Row 2: Spacer
+    { hpt: 25 }  // Row 3: Header
+  ];
+
+  const workbook = XLSXStyle.utils.book_new();
+  XLSXStyle.utils.book_append_sheet(workbook, worksheet, '급여대장');
+  XLSXStyle.writeFile(workbook, `급여대장_세무서제출용_${yyyyMM}.xlsx`);
 };
 
