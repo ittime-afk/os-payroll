@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Download, AlertTriangle, CheckCircle, FileSpreadsheet, Send,
-  Trash2, Edit, Eye, Sparkles, Search, Lock, Unlock, X, MessageSquare
+  Trash2, Edit, Eye, Sparkles, Search, Lock, Unlock, X, MessageSquare,
+  Users, Car, CreditCard, Calendar, Settings, LogOut
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -511,34 +512,80 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
       <div className="fixed top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 z-50"></div>
       
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm px-4 md:px-8 h-16 flex items-center justify-between shrink-0">
+        {/* 왼쪽: 로고 + 타이틀 + 모드 전환 버튼 */}
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100 flex items-center justify-center">
             <FileSpreadsheet className="w-5 h-5" />
           </div>
-          <div>
-            <span className="font-black text-xl tracking-tight text-slate-800">오성 급여관리 시스템</span>
-            <span 
+          <div className="flex items-center gap-2">
+            <span className="font-black text-sm tracking-tight text-slate-800">오성급여</span>
+            <button 
               onClick={toggleMode}
               title="클릭 시 일반 사원 모드로 전환하여 내 급여명세서를 확인합니다."
-              className="cursor-pointer text-[10px] px-2 py-0.5 rounded-full border border-indigo-200 text-indigo-750 bg-indigo-50 hover:bg-indigo-100 transition-all font-bold ml-2 hidden sm:inline-block select-none"
+              className="px-2 py-0.5 rounded-lg border border-indigo-200 text-indigo-750 bg-indigo-50 hover:bg-indigo-100 transition-all font-bold text-[10px] select-none shrink-0"
             >
-              관리자 모드 🔄
-            </span>
+              사용자 🔄
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-black text-slate-400 tracking-widest">Signed In As</span>
-            <span className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+        
+        {/* 오른쪽: 사용자 정보와 로그아웃 아이콘 */}
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <div className="text-xs font-black text-slate-800 leading-tight">
               {userData?.name || '관리자'}
-              <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 border text-slate-500">사무실</span>
-            </span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold leading-tight">
+              {LOCATION_LABELS[userData?.role] || '사무실'}
+            </div>
           </div>
-          <button onClick={handleLogout} className="px-3 py-1.5 border border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-bold text-xs">
-            로그아웃
+          <button 
+            onClick={handleLogout} 
+            title="로그아웃"
+            className="p-1.5 border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all flex items-center justify-center shrink-0"
+          >
+            <LogOut size={13} />
           </button>
         </div>
       </header>
+
+      {/* 메뉴 (네비게이션 탭) */}
+      <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 flex flex-wrap gap-2 items-center shrink-0">
+        <a 
+          href="../users" 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all bg-transparent text-slate-600 hover:bg-slate-100"
+        >
+          <Users size={16} />
+          직원관리
+        </a>
+        <a 
+          href="../vehicle" 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all bg-transparent text-slate-600 hover:bg-slate-100"
+        >
+          <Car size={16} />
+          차량관리
+        </a>
+        <button 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all bg-indigo-600 text-white shadow-md shadow-indigo-200"
+        >
+          <CreditCard size={16} />
+          급여관리
+        </button>
+        <a 
+          href="../request" 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all bg-transparent text-slate-600 hover:bg-slate-100"
+        >
+          <Calendar size={16} />
+          휴가관리
+        </a>
+        <a 
+          href="../users?tab=settings" 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all bg-transparent text-slate-600 hover:bg-slate-100"
+        >
+          <Settings size={16} />
+          환경설정
+        </a>
+      </div>
 
       <main className="flex-1 p-4 md:p-6 max-w-[100vw] overflow-x-hidden space-y-6">
         

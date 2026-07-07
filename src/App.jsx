@@ -31,17 +31,21 @@ const App = () => {
   useEffect(() => {
     let unsubSnapshot = null;
 
-    // 직원코드를 기반으로 payroll_admins 컬렉션에 관리자로 등록되어 있는지 확인하는 함수
+    // 직원코드를 기반으로 admins 컬렉션의 payroll_admins 문서에서 권한(true값)을 확인하는 함수
     const checkAdminStatus = async (userFields) => {
       if (!userFields || !userFields.employeeCode) return false;
       const codeClean = String(userFields.employeeCode).trim();
       if (!codeClean) return false;
 
       try {
-        const adminSnap = await getDoc(doc(db, 'payroll_admins', codeClean));
-        return adminSnap.exists();
+        const adminSnap = await getDoc(doc(db, 'admins', 'payroll_admins'));
+        if (adminSnap.exists()) {
+          const adminData = adminSnap.data();
+          return adminData[codeClean] === true;
+        }
+        return false;
       } catch (err) {
-        console.error('payroll_admins 조회 오류:', err);
+        console.error('admins/payroll_admins 조회 오류:', err);
         return false;
       }
     };
@@ -147,7 +151,7 @@ const App = () => {
   };
 
   // 관리자 권한 판별
-  // users의 사번(employeeCode)이 payroll_admins 컬렉션에 등록된 경우만 관리자로 간주
+  // users의 사번(employeeCode)이 admins 컬렉션의 payroll_admins 문서에서 true값인 경우만 관리자로 간주
   const isAdmin = () => {
     if (!userData) return false;
     return userData.isPayrollAdmin === true;
@@ -174,7 +178,7 @@ const App = () => {
             <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-200">
               <UserCircle className="text-white w-10 h-10" />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">오성 급여조회 시스템</h1>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">오성급여</h1>
             <p className="text-slate-400 text-xs mt-1 font-medium">가입된 급여이메일 계정으로 접속해주세요.</p>
           </div>
           
