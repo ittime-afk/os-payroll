@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import XLSXStyle from 'xlsx-js-style';
 
 // 37개 칼럼 원래 필드 리스트 및 초깃값
 const DEFAULT_PAYROLL_DATA = {
