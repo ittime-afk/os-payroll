@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Download, AlertTriangle, CheckCircle, FileSpreadsheet, Send,
   Trash2, Edit, Eye, Sparkles, Search, Lock, Unlock, X, MessageSquare,
-  Users, Car, CreditCard, Calendar, Settings, LogOut
+  Users, Car, CreditCard, Calendar, Settings, LogOut, Printer
 } from 'lucide-react';
-import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, addDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, addDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { parsePayrollExcel, downloadPayrollTemplate, getExcelSheetNames, exportPayrollToExcel } from '../utils/excelUtils';
 import { generatePayrollEmailHtml } from '../utils/emailTemplate';
@@ -49,6 +49,20 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
   // 이메일 발송 상태
   const [selectedSalaries, setSelectedSalaries] = useState([]); // 다중 선택
   const [sendingEmailIds, setSendingEmailIds] = useState({}); // { docId: true }
+
+  // 개인별 대장 출력 상태
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printSelectedUser, setPrintSelectedUser] = useState('');
+  const [printStartMonth, setPrintStartMonth] = useState(() => {
+    const y = new Date().getFullYear();
+    return `${y}-01`; // 기본값: 금년 1월
+  });
+  const [printEndMonth, setPrintEndMonth] = useState(() => {
+    return yearMonth; // 기본값: 현재 선택된 월
+  });
+  const [printSalaries, setPrintSalaries] = useState([]);
+  const [isLoadingPrintData, setIsLoadingPrintData] = useState(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
 
   // 부서(role) 및 회사 라벨
   const COMPANY_LABELS = { osung: '오성합판', nbboard: 'nbboard' };
@@ -300,6 +314,284 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
       return;
     }
     exportPayrollToExcel(filteredSavedSalaries, yearMonth);
+  };
+
+  const handleFetchPrintData = async () => {
+    if (!printSelectedUser) {
+      alert('대상 직원을 선택해주십시오.');
+      return;
+    }
+    if (!printStartMonth || !printEndMonth) {
+      alert('조회 기간을 선택해주십시오.');
+      return;
+    }
+    if (printStartMonth > printEndMonth) {
+      alert('시작월이 종료월보다 늦을 수 없습니다.');
+      return;
+    }
+
+    setIsLoadingPrintData(true);
+    try {
+      const q = query(
+        collection(db, 'salaries'),
+        where('uid', '==', printSelectedUser)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const list = [];
+      querySnapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      
+      const filtered = list
+        .filter(sal => sal.yearMonth >= printStartMonth && sal.yearMonth <= printEndMonth)
+        .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+        
+      setPrintSalaries(filtered);
+      setIsPrintPreviewOpen(true);
+    } catch (e) {
+      alert('급여 데이터를 불러오는데 실패했습니다: ' + e.message);
+    } finally {
+      setIsLoadingPrintData(false);
+    }
+  };
+
+  const handlePrintAction = () => {
+    if (printSalaries.length === 0) return;
+    
+    const matchedUser = users.find(u => u.uid === printSelectedUser || u.id === printSelectedUser);
+    const userName = matchedUser ? matchedUser.name : '';
+    const userCode = matchedUser ? (matchedUser.employeeCode || '') : '';
+    const userRole = matchedUser ? (LOCATION_LABELS[matchedUser.role] || '') : '';
+    const userCompany = matchedUser ? (COMPANY_LABELS[matchedUser.company] || '') : '오성합판';
+
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    
+    const format = (val) => Number(val || 0).toLocaleString();
+    
+    let rowsHtml = '';
+    printSalaries.forEach(sal => {
+      const meal = Number(sal.mealAllowance || 0);
+      const mealNonTaxable = meal > 200000 ? 200000 : meal;
+      const mealTaxable = meal > 200000 ? meal - 200000 : 0;
+      
+      rowsHtml += `
+        <tr>
+          <td>${sal.yearMonth}</td>
+          <td class="num">${format(sal.baseSalaryNormal)}</td>
+          <td class="num">${format(sal.baseSalaryService)}</td>
+          <td class="num">${format(sal.weeklyHolidayAllowance)}</td>
+          <td class="num">${format(mealNonTaxable)}</td>
+          <td class="num">${format(mealTaxable)}</td>
+          <td class="num">${format(sal.fullAttendanceAllowance)}</td>
+          <td class="num">${format(sal.responsibilityAllowance1)}</td>
+          <td class="num">${format(sal.responsibilityAllowance2)}</td>
+          <td class="num">${format(sal.irregularIncentive)}</td>
+          <td class="num">${format(sal.bonus)}</td>
+          <td class="num">${format(sal.otherAllowance1)}</td>
+          <td class="num">${format(sal.drivingAllowance)}</td>
+          <td class="num">${format(sal.childcareAllowance)}</td>
+          <td class="num">${format(sal.otherAllowance2)}</td>
+          <td class="num bold bg-light">${format(sal.totalAllowance)}</td>
+          <td class="num bg-light">${format(sal.taxableTotal || sal.totalAllowance)}</td>
+          <td class="num">${format(sal.nationalPension)}</td>
+          <td class="num">${format(sal.healthInsurance)}</td>
+          <td class="num">${format(sal.longTermCare)}</td>
+          <td class="num">${format(sal.employmentInsurance)}</td>
+          <td class="num">${format(sal.incomeTax)}</td>
+          <td class="num">${format(sal.localIncomeTax)}</td>
+          <td class="num">${format(sal.yearEndIncomeTax)}</td>
+          <td class="num">${format(sal.yearEndLocalIncomeTax)}</td>
+          <td class="num">${format(sal.advancePayment)}</td>
+          <td class="num bold bg-light">${format(sal.totalDeduction)}</td>
+          <td class="num bg-light">${format(sal.deductibleTax)}</td>
+          <td class="num bold bg-light">${format(sal.totalAfterTax)}</td>
+        </tr>
+      `;
+    });
+
+    const sum = (fn) => printSalaries.reduce((acc, sal) => acc + Number(fn(sal) || 0), 0);
+    const getMealAllowance = (sal) => Number(sal.mealAllowance || 0);
+    const getMealNonTaxable = (sal) => {
+      const meal = getMealAllowance(sal);
+      return meal > 200000 ? 200000 : meal;
+    };
+    const getMealTaxable = (sal) => {
+      const meal = getMealAllowance(sal);
+      return meal > 200000 ? meal - 200000 : 0;
+    };
+
+    const totalRowHtml = `
+      <tr class="total-row">
+        <td>합계</td>
+        <td class="num">${format(sum(sal => sal.baseSalaryNormal))}</td>
+        <td class="num">${format(sum(sal => sal.baseSalaryService))}</td>
+        <td class="num">${format(sum(sal => sal.weeklyHolidayAllowance))}</td>
+        <td class="num">${format(sum(getMealNonTaxable))}</td>
+        <td class="num">${format(sum(getMealTaxable))}</td>
+        <td class="num">${format(sum(sal => sal.fullAttendanceAllowance))}</td>
+        <td class="num">${format(sum(sal => sal.responsibilityAllowance1))}</td>
+        <td class="num">${format(sum(sal => sal.responsibilityAllowance2))}</td>
+        <td class="num">${format(sum(sal => sal.irregularIncentive))}</td>
+        <td class="num">${format(sum(sal => sal.bonus))}</td>
+        <td class="num">${format(sum(sal => sal.otherAllowance1))}</td>
+        <td class="num">${format(sum(sal => sal.drivingAllowance))}</td>
+        <td class="num">${format(sum(sal => sal.childcareAllowance))}</td>
+        <td class="num">${format(sum(sal => sal.otherAllowance2))}</td>
+        <td class="num bold bg-light">${format(sum(sal => sal.totalAllowance))}</td>
+        <td class="num bg-light">${format(sum(sal => sal.taxableTotal || sal.totalAllowance))}</td>
+        <td class="num">${format(sum(sal => sal.nationalPension))}</td>
+        <td class="num">${format(sum(sal => sal.healthInsurance))}</td>
+        <td class="num">${format(sum(sal => sal.longTermCare))}</td>
+        <td class="num">${format(sum(sal => sal.employmentInsurance))}</td>
+        <td class="num">${format(sum(sal => sal.incomeTax))}</td>
+        <td class="num">${format(sum(sal => sal.localIncomeTax))}</td>
+        <td class="num">${format(sum(sal => sal.yearEndIncomeTax))}</td>
+        <td class="num">${format(sum(sal => sal.yearEndLocalIncomeTax))}</td>
+        <td class="num">${format(sum(sal => sal.advancePayment))}</td>
+        <td class="num bold bg-light">${format(sum(sal => sal.totalDeduction))}</td>
+        <td class="num bg-light">${format(sum(sal => sal.deductibleTax))}</td>
+        <td class="num bold bg-light">${format(sum(sal => sal.totalAfterTax))}</td>
+      </tr>
+    `;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>개인별 급여대장 - ${userName}</title>
+        <style>
+          body {
+            font-family: 'Malgun Gothic', 'Dotum', sans-serif;
+            margin: 20px;
+            color: #333;
+            font-size: 11px;
+          }
+          h1 {
+            text-align: center;
+            font-size: 20px;
+            margin-bottom: 20px;
+          }
+          .info-table {
+            width: 100%;
+            margin-bottom: 15px;
+            border-collapse: collapse;
+          }
+          .info-table td {
+            padding: 5px 8px;
+            border: 1px solid #ddd;
+          }
+          .info-table .label {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            width: 12%;
+            text-align: center;
+          }
+          .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          .data-table th, .data-table td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: center;
+          }
+          .data-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+          }
+          .num {
+            text-align: right;
+          }
+          .bold {
+            font-weight: bold;
+          }
+          .bg-light {
+            background-color: #fafafa;
+          }
+          .total-row {
+            background-color: #eaeaea;
+            font-weight: bold;
+          }
+          .total-row td {
+            border-top: 1px solid #000;
+            border-bottom: 3px double #000;
+          }
+          @media print {
+            body { margin: 10px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>개인별 급여대장</h1>
+        
+        <table class="info-table">
+          <tr>
+            <td class="label">성명</td>
+            <td>${userName}</td>
+            <td class="label">사원코드</td>
+            <td>${userCode || '-'}</td>
+            <td class="label">회사</td>
+            <td>${userCompany}</td>
+            <td class="label">부서/소속</td>
+            <td>${userRole}</td>
+          </tr>
+          <tr>
+            <td class="label">조회 기간</td>
+            <td colspan="7">${printStartMonth} ~ ${printEndMonth}</td>
+          </tr>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>귀속월</th>
+              <th>보통기본급</th>
+              <th>근속기본급</th>
+              <th>주휴수당</th>
+              <th>식대(비과세)</th>
+              <th>식대(과세)</th>
+              <th>만근수당</th>
+              <th>연장수당</th>
+              <th>연차수당</th>
+              <th>비정기인센</th>
+              <th>상여</th>
+              <th>기타책임</th>
+              <th>자가운전</th>
+              <th>육아수당</th>
+              <th>기타금품</th>
+              <th>소득총액</th>
+              <th>과세합계</th>
+              <th>국민연금</th>
+              <th>건강보험</th>
+              <th>장기요양</th>
+              <th>고용보험</th>
+              <th>소득세</th>
+              <th>주민세</th>
+              <th>연말소득세</th>
+              <th>연말주민세</th>
+              <th>가불</th>
+              <th>공제총액</th>
+              <th>공제(가불제외)</th>
+              <th>실제지급액</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            ${totalRowHtml}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
   };
 
   const handleToggleStatus = async (sal) => {
@@ -960,6 +1252,12 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
               >
                 <Download size={12} /> 세무서 제출용 엑셀 다운로드
               </button>
+              <button 
+                onClick={() => setIsPrintModalOpen(true)}
+                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-all shadow-sm active:scale-95"
+              >
+                <Printer size={12} /> 사용자별 대장 출력
+              </button>
             </div>
           </div>
 
@@ -1413,6 +1711,252 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 1. 개인별 대장 출력 설정 모달 */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <Printer className="text-indigo-600 w-5 h-5" /> 개인별 급여대장 출력
+              </h3>
+              <button 
+                onClick={() => setIsPrintModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-50 p-1.5 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="py-4 space-y-4 overflow-y-auto">
+              <div className="space-y-1.5">
+                <label className="text-xs text-slate-500 font-bold">대상 직원</label>
+                <select 
+                  value={printSelectedUser} 
+                  onChange={(e) => setPrintSelectedUser(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">직원을 선택해주십시오</option>
+                  {[...users].sort((a, b) => a.name.localeCompare(b.name)).map(u => (
+                    <option key={u.id} value={u.uid || u.id}>
+                      {u.name} ({LOCATION_LABELS[u.role] || '사원'} / {u.employeeCode || '-'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-500 font-bold">조회 시작월</label>
+                  <input 
+                    type="month"
+                    value={printStartMonth}
+                    onChange={(e) => setPrintStartMonth(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-500 font-bold">조회 종료월</label>
+                  <input 
+                    type="month"
+                    value={printEndMonth}
+                    onChange={(e) => setPrintEndMonth(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+              <button 
+                onClick={() => setIsPrintModalOpen(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl"
+              >
+                취소
+              </button>
+              <button 
+                onClick={handleFetchPrintData}
+                disabled={isLoadingPrintData}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isLoadingPrintData ? '조회 중...' : '조회 및 미리보기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. 대장 미리보기 모달 */}
+      {isPrintPreviewOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-6xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <Printer className="text-indigo-600 w-5 h-5" /> 급여대장 미리보기
+              </h3>
+              <button 
+                onClick={() => setIsPrintPreviewOpen(false)}
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-50 p-1.5 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="py-4 overflow-auto flex-1">
+              {printSalaries.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 font-semibold bg-slate-50/50 rounded-xl">
+                  해당 기간 내에 등록된 급여 내역이 존재하지 않습니다.
+                </div>
+              ) : (
+                <table className="w-full border-collapse border border-slate-200 text-[10px] min-w-[2000px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 font-black border-b border-slate-200">
+                      <th className="border border-slate-200 p-1">귀속월</th>
+                      <th className="border border-slate-200 p-1 text-right">보통기본급</th>
+                      <th className="border border-slate-200 p-1 text-right">근속기본급</th>
+                      <th className="border border-slate-200 p-1 text-right">주휴수당</th>
+                      <th className="border border-slate-200 p-1 text-right">식대(비과세)</th>
+                      <th className="border border-slate-200 p-1 text-right">식대(과세)</th>
+                      <th className="border border-slate-200 p-1 text-right">만근수당</th>
+                      <th className="border border-slate-200 p-1 text-right">연장수당</th>
+                      <th className="border border-slate-200 p-1 text-right">연차수당</th>
+                      <th className="border border-slate-200 p-1 text-right">비정기인센</th>
+                      <th className="border border-slate-200 p-1 text-right">상여</th>
+                      <th className="border border-slate-200 p-1 text-right">기타책임</th>
+                      <th className="border border-slate-200 p-1 text-right">자가운전</th>
+                      <th className="border border-slate-200 p-1 text-right">육아수당</th>
+                      <th className="border border-slate-200 p-1 text-right">기타금품</th>
+                      <th className="border border-slate-200 p-1 text-right bg-slate-50">소득총액</th>
+                      <th className="border border-slate-200 p-1 text-right bg-slate-50">과세합계</th>
+                      <th className="border border-slate-200 p-1 text-right">국민연금</th>
+                      <th className="border border-slate-200 p-1 text-right">건강보험</th>
+                      <th className="border border-slate-200 p-1 text-right">장기요양</th>
+                      <th className="border border-slate-200 p-1 text-right">고용보험</th>
+                      <th className="border border-slate-200 p-1 text-right">소득세</th>
+                      <th className="border border-slate-200 p-1 text-right">주민세</th>
+                      <th className="border border-slate-200 p-1 text-right">연말소득세</th>
+                      <th className="border border-slate-200 p-1 text-right">연말주민세</th>
+                      <th className="border border-slate-200 p-1 text-right">가불</th>
+                      <th className="border border-slate-200 p-1 text-right bg-slate-50">공제총액</th>
+                      <th className="border border-slate-200 p-1 text-right bg-slate-50">공제(가불제외)</th>
+                      <th className="border border-slate-200 p-1 text-right bg-slate-50">실제지급액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printSalaries.map(sal => {
+                      const meal = Number(sal.mealAllowance || 0);
+                      const mealNonTaxable = meal > 200000 ? 200000 : meal;
+                      const mealTaxable = meal > 200000 ? meal - 200000 : 0;
+                      return (
+                        <tr key={sal.id} className="hover:bg-slate-50">
+                          <td className="border border-slate-200 p-1 text-center font-bold">{sal.yearMonth}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.baseSalaryNormal.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.baseSalaryService.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.weeklyHolidayAllowance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{mealNonTaxable.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{mealTaxable.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.fullAttendanceAllowance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.responsibilityAllowance1.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.responsibilityAllowance2.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.irregularIncentive.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.bonus.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.otherAllowance1.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.drivingAllowance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.childcareAllowance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.otherAllowance2.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono font-bold bg-slate-50">{sal.totalAllowance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono bg-slate-50">{(sal.taxableTotal || sal.totalAllowance).toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.nationalPension.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.healthInsurance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.longTermCare.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.employmentInsurance.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.incomeTax.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.localIncomeTax.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.yearEndIncomeTax.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.yearEndLocalIncomeTax.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono">{sal.advancePayment.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono font-bold bg-slate-50">{sal.totalDeduction.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono bg-slate-50">{sal.deductibleTax.toLocaleString()}</td>
+                          <td className="border border-slate-200 p-1 text-right font-mono font-bold bg-indigo-50 text-indigo-700">{sal.totalAfterTax.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                    {/* 합계 행 */}
+                    <tr className="bg-slate-100 font-bold border-t-2 border-slate-350">
+                      <td className="border border-slate-200 p-1 text-center font-black">합계</td>
+                      {(() => {
+                        const sum = (fn) => printSalaries.reduce((acc, sal) => acc + Number(fn(sal) || 0), 0);
+                        const getMealAllowance = (sal) => Number(sal.mealAllowance || 0);
+                        const getMealNonTaxable = (sal) => {
+                          const m = getMealAllowance(sal);
+                          return m > 200000 ? 200000 : m;
+                        };
+                        const getMealTaxable = (sal) => {
+                          const m = getMealAllowance(sal);
+                          return m > 200000 ? m - 200000 : 0;
+                        };
+
+                        const sumFns = [
+                          (sal) => sal.baseSalaryNormal,
+                          (sal) => sal.baseSalaryService,
+                          (sal) => sal.weeklyHolidayAllowance,
+                          getMealNonTaxable,
+                          getMealTaxable,
+                          (sal) => sal.fullAttendanceAllowance,
+                          (sal) => sal.responsibilityAllowance1,
+                          (sal) => sal.responsibilityAllowance2,
+                          (sal) => sal.irregularIncentive,
+                          (sal) => sal.bonus,
+                          (sal) => sal.otherAllowance1,
+                          (sal) => sal.drivingAllowance,
+                          (sal) => sal.childcareAllowance,
+                          (sal) => sal.otherAllowance2,
+                          (sal) => sal.totalAllowance,
+                          (sal) => sal.taxableTotal || sal.totalAllowance,
+                          (sal) => sal.nationalPension,
+                          (sal) => sal.healthInsurance,
+                          (sal) => sal.longTermCare,
+                          (sal) => sal.employmentInsurance,
+                          (sal) => sal.incomeTax,
+                          (sal) => sal.localIncomeTax,
+                          (sal) => sal.yearEndIncomeTax,
+                          (sal) => sal.yearEndLocalIncomeTax,
+                          (sal) => sal.advancePayment,
+                          (sal) => sal.totalDeduction,
+                          (sal) => sal.deductibleTax,
+                          (sal) => sal.totalAfterTax
+                        ];
+
+                        return sumFns.map((fn, idx) => (
+                          <td key={idx} className="border border-slate-200 p-1 text-right font-mono">
+                            {sum(fn).toLocaleString()}
+                          </td>
+                        ));
+                      })()}
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+              <button 
+                onClick={() => setIsPrintPreviewOpen(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl"
+              >
+                닫기
+              </button>
+              <button 
+                onClick={handlePrintAction}
+                disabled={printSalaries.length === 0}
+                className="px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4" /> 인쇄하기
+              </button>
+            </div>
           </div>
         </div>
       )}
