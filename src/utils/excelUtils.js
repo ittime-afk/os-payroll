@@ -356,11 +356,18 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
   const headers = [
     '직원코드', '성명', '보통기본급', '근속기본급', '주휴수당',
     '식대보조(비과세)', '식대보조(과세)', '만근수당', '연장수당', '연차수당',
-    '비정기인센티브', '상여', '기타책임수당', '자가운전보조', '육아수당',
-    '기타금품', '소득총액', '과세합계', '국민연금', '건강보험',
-    '장기요양', '고용보험', '소득세', '주민세', '연말정산소득세',
-    '연말정산주민세', '가불', '공제총액(가불포함)', '실제지급(가불미포)',
-    '공제액(가불제외)', '실제지급(가불포함)', '연장근로시간', '연차사용일수', '개별메모'
+    '비정기인센티브', '상여', '기타책임수당', '자가운전보조', '육아수당', '기타금품', 
+    '', // Divider 1 (기타금품, 소득총액 사이)
+    '소득총액', '과세합계', 
+    '', // Divider 2 (과세합계, 국민연금 사이)
+    '국민연금', '건강보험', '장기요양', '고용보험', 
+    '', // Divider 3 (고용보험, 소득세 사이)
+    '소득세', '주민세', 
+    '', // Divider 4 (주민세, 연말정산소득세 사이)
+    '연말정산소득세', '연말정산주민세', 
+    '가불', 
+    '', // Divider 5 (공제총액 가불 사이)
+    '공제총액(가불포함)', '실제지급(가불미포)', '공제액(가불제외)', '실제지급(가불포함)'
   ];
 
   const rows = salaries.map(sal => {
@@ -385,33 +392,90 @@ export const exportPayrollToExcel = (salaries, yearMonthStr = '') => {
       Number(sal.drivingAllowance || 0),
       Number(sal.childcareAllowance || 0),
       Number(sal.otherAllowance2 || 0),
+      '', // Divider 1
       Number(sal.totalAllowance || 0),
       Number(sal.taxableTotal || sal.totalAllowance || 0),
+      '', // Divider 2
       Number(sal.nationalPension || 0),
       Number(sal.healthInsurance || 0),
       Number(sal.longTermCare || 0),
       Number(sal.employmentInsurance || 0),
+      '', // Divider 3
       Number(sal.incomeTax || 0),
       Number(sal.localIncomeTax || 0),
+      '', // Divider 4
       Number(sal.yearEndIncomeTax || 0),
       Number(sal.yearEndLocalIncomeTax || 0),
       Number(sal.advancePayment || 0),
+      '', // Divider 5
       Number(sal.totalDeduction || 0),
       Number(sal.netPay || 0),
       Number(sal.deductibleTax || 0),
-      Number(sal.totalAfterTax || 0),
-      Number(sal.overtimeHours || 0),
-      Number(sal.leaveDaysUsed || 0),
-      sal.individualMemo || ''
+      Number(sal.totalAfterTax || 0)
     ];
   });
 
-  const wsData = [headers, ...rows];
+  const yyyyMM = yearMonthStr || new Date().toISOString().substring(0, 7);
+  const [yyyy, mm] = yyyyMM.split('-');
+  const title = `${yyyy}년 ${mm}월 급여대장`;
+
+  // aoaData: 1열 제목, 2열 공백, 3열 헤더, 4열+ 데이터
+  const wsData = [
+    [title],
+    [],
+    headers,
+    ...rows
+  ];
+
   const worksheet = XLSX.utils.aoa_to_sheet(wsData);
+
+  // 셀 병합 (제목 A1을 전체 열 너비로 병합)
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }
+  ];
+
+  // 열 너비 설정 (구분선 Divider 열은 2로 좁게 설정)
+  worksheet['!cols'] = [
+    { wch: 10 }, // 직원코드
+    { wch: 10 }, // 성명
+    { wch: 12 }, // 보통기본급
+    { wch: 12 }, // 근속기본급
+    { wch: 12 }, // 주휴수당
+    { wch: 14 }, // 식대보조(비과세)
+    { wch: 14 }, // 식대보조(과세)
+    { wch: 12 }, // 만근수당
+    { wch: 12 }, // 연장수당
+    { wch: 12 }, // 연차수당
+    { wch: 14 }, // 비정기인센티브
+    { wch: 12 }, // 상여
+    { wch: 14 }, // 기타책임수당
+    { wch: 12 }, // 자가운전보조
+    { wch: 12 }, // 육아수당
+    { wch: 12 }, // 기타금품
+    { wch: 2 },  // Divider 1
+    { wch: 14 }, // 소득총액
+    { wch: 14 }, // 과세합계
+    { wch: 2 },  // Divider 2
+    { wch: 12 }, // 국민연금
+    { wch: 12 }, // 건강보험
+    { wch: 12 }, // 장기요양
+    { wch: 12 }, // 고용보험
+    { wch: 2 },  // Divider 3
+    { wch: 12 }, // 소득세
+    { wch: 12 }, // 주민세
+    { wch: 2 },  // Divider 4
+    { wch: 14 }, // 연말정산소득세
+    { wch: 14 }, // 연말정산주민세
+    { wch: 12 }, // 가불
+    { wch: 2 },  // Divider 5
+    { wch: 16 }, // 공제총액(가불포함)
+    { wch: 16 }, // 실제지급(가불미포)
+    { wch: 16 }, // 공제액(가불제외)
+    { wch: 16 }  // 실제지급(가불포함)
+  ];
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, '급여대장');
-  
-  const yyyyMM = yearMonthStr || new Date().toISOString().substring(0, 7);
   XLSX.writeFile(workbook, `급여대장_세무서제출용_${yyyyMM}.xlsx`);
 };
 
