@@ -1254,7 +1254,7 @@ const AdminDashboard = ({ userData, handleLogout, toggleMode }) => {
               </button>
               <button 
                 onClick={() => setIsPrintModalOpen(true)}
-                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-all shadow-sm active:scale-95"
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-all shadow-sm active:scale-95"
               >
                 <Printer size={12} /> 사용자별 대장 출력
               </button>
